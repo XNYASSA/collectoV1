@@ -45,7 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
           case 'dataTransfert':
             return const DataTransfertScreen();
           case 'report':
-            return const ReportScreen();
+            return ReportScreen(username: widget.username);
           default:
             return HomeScreen(username: widget.username); // Passer dynamiquement le nom d'utilisateur
         }

@@ -3,6 +3,7 @@ import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/view_users_screen.dart'; // Importer l'écran de visualisation des utilisateurs
+import 'screens/settings_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -26,6 +27,7 @@ class MyApp extends StatelessWidget {
         '/register': (context) => RegisterScreen(),
         '/home': (context) => HomeScreen(username: 'DefaultUser'), // Ajouter la route pour l'écran d'accueil avec un username par défaut
         '/view_users': (context) => ViewUsersScreen(), // Ajouter la route pour l'écran de visualisation des utilisateurs
+         '/settings': (context) => SettingsScreen(), // Added route for settings
       },
     );
   }

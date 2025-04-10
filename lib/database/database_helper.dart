@@ -71,12 +71,22 @@ class DatabaseHelper {
           id INTEGER PRIMARY KEY AUTOINCREMENT, -- Colonne id (clé primaire)
           montant REAL NOT NULL, -- Colonne montant
           date TEXT NOT NULL, -- Colonne date
+          transaction_date TEXT NOT NULL, -- Colonne transaction_date
           client_id INTEGER NOT NULL, -- Colonne client_id
           collector_name TEXT NOT NULL, -- Colonne collector_name
           recu_numero INTEGER UNIQUE NOT NULL, -- Colonne recu_numero
           FOREIGN KEY (client_id) REFERENCES Client(id) ON DELETE CASCADE ON UPDATE CASCADE -- Clé étrangère
         )
       ''');
+
+      // Création de la table Config pour stocker les configurations
+      await db.execute('''
+        CREATE TABLE Config (
+          key TEXT PRIMARY KEY, -- Clé unique pour chaque configuration
+          value TEXT NOT NULL -- Valeur associée à la clé
+        )
+      ''');
+      print('Table Config créée.');
     } catch (e) {
       print('Erreur lors de la création des tables : $e'); // Message d'erreur
       rethrow; // Relance de l'exception
@@ -86,11 +96,26 @@ class DatabaseHelper {
   // Fonction appelée lors de la mise à jour de la base de données
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
+      // Ajout de la colonne transaction_date à la table Transactions
+      await db.execute('''
+        ALTER TABLE Transactions ADD COLUMN transaction_date TEXT
+      ''');
+      print('Colonne transaction_date ajoutée à la table Transactions.');
+
       // Ajoutez la colonne client_zone_number à la table Transactions
       await db.execute('''
         ALTER TABLE Transactions ADD COLUMN client_zone_number INTEGER
       ''');
       print('Colonne client_zone_number ajoutée à la table Transactions.');
+
+      // Ajout de la table Config si elle n'existe pas
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS Config (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        )
+      ''');
+      print('Table Config ajoutée lors de la mise à jour.');
     }
   }
 
@@ -107,16 +132,36 @@ class DatabaseHelper {
   }
 
   // Fonction pour ajouter une transaction
-  Future<void> addTransaction(double montant, int clientId, String collectorName, int recuNumero) async {
+  Future<void> addTransaction(double montant, int clientId, String collectorName) async {
     final db = await database;
+
+    // Récupérer la date actuelle
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day).toIso8601String();
+
+    // Vérifier le dernier numéro de transaction pour la date actuelle
+    final List<Map<String, dynamic>> result = await db.rawQuery('''
+      SELECT MAX(recu_numero) as last_recu_numero
+      FROM Transactions
+      WHERE transaction_date = ?
+    ''', [today]);
+
+    int newRecuNumero = 1; // Par défaut, le numéro commence à 1
+    if (result.isNotEmpty && result.first['last_recu_numero'] != null) {
+      newRecuNumero = result.first['last_recu_numero'] + 1; // Incrémenter le dernier numéro
+    }
+
+    // Ajouter la transaction avec le nouveau numéro
     await db.insert('Transactions', {
       'montant': montant,
-      'date': DateTime.now().toIso8601String(), // Date et heure actuelles au format ISO 8601
+      'date': now.toIso8601String(),
+      'transaction_date': today, // Stocker la date de la transaction
       'client_id': clientId,
       'collector_name': collectorName,
-      'recu_numero': recuNumero,
+      'recu_numero': newRecuNumero,
     });
-    print('Transaction ajoutée : Montant $montant, Client ID $clientId, Collecteur $collectorName, Reçu n°$recuNumero');
+
+    print('Transaction ajoutée avec le numéro de reçu : $newRecuNumero');
   }
 
   // Fonction pour ajouter un client
@@ -189,6 +234,50 @@ class DatabaseHelper {
       print('Base de données supprimée avec succès.'); // Message de confirmation
     } catch (e) {
       print('Erreur lors de la suppression de la base de données : $e'); // Message d'erreur
+    }
+  }
+
+  // Modification pour ne pas supprimer les transactions existantes
+  Future<void> resetRecuNumeroIfNeeded() async {
+    final db = await database; // Accès à la base de données
+
+    // Récupérer la date actuelle
+    final now = DateTime.now();
+
+    // Récupérer la dernière date de réinitialisation stockée dans une table de configuration
+    final List<Map<String, dynamic>> result = await db.query(
+      'Config',
+      where: 'key = ?',
+      whereArgs: ['last_reset_date'],
+    );
+
+    // Si aucune date n'est stockée, initialiser la table Config
+    if (result.isEmpty) {
+      await db.insert('Config', {
+        'key': 'last_reset_date',
+        'value': now.toIso8601String(),
+      });
+      return; // Pas besoin de réinitialiser pour la première exécution
+    }
+
+    // Récupérer la dernière date de réinitialisation
+    final lastResetDate = DateTime.parse(result.first['value']);
+
+    // Vérifier si la date actuelle est un nouveau jour par rapport à la dernière réinitialisation
+    if (now.difference(lastResetDate).inDays >= 1) {
+      // Réinitialiser uniquement le numéro de reçu
+      await db.update(
+        'Transactions',
+        {'recu_numero': null}, // Réinitialiser le numéro de reçu à null ou 0
+      );
+
+      // Mettre à jour la dernière date de réinitialisation
+      await db.update(
+        'Config',
+        {'value': now.toIso8601String()},
+        where: 'key = ?',
+        whereArgs: ['last_reset_date'],
+      );
     }
   }
 }
