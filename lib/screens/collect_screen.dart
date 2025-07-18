@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../database/database_helper.dart';
 import 'receipt_screen.dart';
 
@@ -32,57 +33,72 @@ class _CollectScreenState extends State<CollectScreen> {
   }
 
   Future<void> _handleCollect() async {
-    if (_selectedClientId == null || _montantController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Veuillez remplir tous les champs')),
+    try {
+      if (_selectedClientId == null || _montantController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Veuillez remplir tous les champs')),
+        );
+        return;
+      }
+
+      final db = await DatabaseHelper().database;
+
+      final now = DateTime.now();
+      final todayStr = DateFormat('yyyy-MM-dd').format(now);
+
+      // Compter le nombre de transactions pour la date du jour
+      final List<Map<String, dynamic>> todaysTransactions = await db.query(
+        'Transactions',
+        where: "date LIKE ?",
+        whereArgs: ['$todayStr%'],
       );
-      return;
-    }
+      final int recuNumero = todaysTransactions.length + 1; // Le numéro repart à 1 chaque jour
 
-    final db = await DatabaseHelper().database;
-    final List<Map<String, dynamic>> transactions = await db.query('Transactions');
-    final int recuNumero = transactions.length + 1;
+      final client = _clients.firstWhere(
+        (client) => client['id'] == _selectedClientId,
+        orElse: () => {'nom': '', 'prenom': '', 'zone_number': ''},
+      );
 
-    // Récupérer les informations du client sélectionné
-    final client = _clients.firstWhere(
-      (client) => client['id'] == _selectedClientId,
-      orElse: () => {'nom': '', 'prenom': '', 'zone_number': ''},
-    );
+      final transactionDb = {
+        'montant': double.parse(_montantController.text),
+        'date': now.toIso8601String(),
+        'client_id': _selectedClientId,
+        'collector_name': widget.collectorName,
+        'recu_numero': recuNumero,
+        'client_zone_number': client['zone_number'],
+      };
 
-    final transaction = {
-      'montant': double.parse(_montantController.text),
-      'date': DateTime.now().toIso8601String(),
-      'client_id': _selectedClientId,
-      'collector_name': widget.collectorName,
-      'recu_numero': recuNumero,
-      'client_zone_number': client['zone_number'], // Ajout du numéro de zone
-    };
+      await db.insert('Transactions', transactionDb);
 
-    await db.insert('Transactions', transaction);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Transaction enregistrée avec le reçu n°$recuNumero')),
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Transaction enregistrée avec le reçu n°$recuNumero')),
-    );
-
-    // Naviguer vers ReceiptScreen avec les détails de la transaction
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ReceiptScreen(
-          transaction: {
-            ...transaction,
-            'client_nom': client['nom'],
-            'client_prenom': client['prenom'],
-          },
-          username: widget.collectorName,
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ReceiptScreen(
+            transaction: {
+              ...transactionDb,
+              'client_nom': client['nom'],
+              'client_prenom': client['prenom'],
+            },
+            username: widget.collectorName,
+          ),
         ),
-      ),
-    );
+      );
 
-    _montantController.clear();
-    setState(() {
-      _selectedClientId = null;
-    });
+      _montantController.clear();
+      setState(() {
+        _selectedClientId = null;
+      });
+    } catch (e, stack) {
+      print('Erreur dans _handleCollect: $e');
+      print(stack);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur : $e')),
+      );
+    }
   }
 
   @override
@@ -131,7 +147,11 @@ class _CollectScreenState extends State<CollectScreen> {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: _handleCollect,
+              onPressed: () async {
+                // Ajout d'un print pour vérifier l'appel
+                print('Bouton Valider la collecte cliqué');
+                await _handleCollect();
+              },
               child: const Text('Valider la collecte'),
             ),
           ],
@@ -140,3 +160,4 @@ class _CollectScreenState extends State<CollectScreen> {
     );
   }
 }
+            

@@ -68,14 +68,16 @@ class DatabaseHelper {
       // Création de la table Transactions
       await db.execute('''
         CREATE TABLE Transactions (
-          id INTEGER PRIMARY KEY AUTOINCREMENT, -- Colonne id (clé primaire)
-          montant REAL NOT NULL, -- Colonne montant
-          date TEXT NOT NULL, -- Colonne date
-          transaction_date TEXT NOT NULL, -- Colonne transaction_date
-          client_id INTEGER NOT NULL, -- Colonne client_id
-          collector_name TEXT NOT NULL, -- Colonne collector_name
-          recu_numero INTEGER UNIQUE NOT NULL, -- Colonne recu_numero
-          FOREIGN KEY (client_id) REFERENCES Client(id) ON DELETE CASCADE ON UPDATE CASCADE -- Clé étrangère
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          montant REAL NOT NULL,
+          date TEXT NOT NULL,
+          transaction_date TEXT NOT NULL,
+          client_id INTEGER NOT NULL,
+          collector_name TEXT NOT NULL,
+          recu_numero INTEGER NOT NULL,
+          client_zone_number INTEGER,
+          UNIQUE (transaction_date, recu_numero),
+          FOREIGN KEY (client_id) REFERENCES Client(id) ON DELETE CASCADE ON UPDATE CASCADE
         )
       ''');
 
@@ -234,6 +236,16 @@ class DatabaseHelper {
       print('Base de données supprimée avec succès.'); // Message de confirmation
     } catch (e) {
       print('Erreur lors de la suppression de la base de données : $e'); // Message d'erreur
+    }
+  }
+
+  // Fonction pour supprimer le fichier de base de données (pour développement uniquement)
+  Future<void> deleteDatabaseFile() async {
+    Directory directory = await getApplicationDocumentsDirectory();
+    String path = join(directory.path, 'collecto.db');
+    if (await File(path).exists()) {
+      await File(path).delete();
+      print('Base de données supprimée');
     }
   }
 

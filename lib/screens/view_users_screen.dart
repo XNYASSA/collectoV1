@@ -4,6 +4,8 @@ import '../widgets/custom_bottom_bar.dart';
 import '../database/database_helper.dart';
 
 class ViewUsersScreen extends StatefulWidget {
+  const ViewUsersScreen({super.key});
+
   @override
   _ViewUsersScreenState createState() => _ViewUsersScreenState();
 }
